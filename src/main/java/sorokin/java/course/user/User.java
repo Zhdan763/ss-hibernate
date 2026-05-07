@@ -1,18 +1,29 @@
 package sorokin.java.course.user;
 
-import java.util.List;
-
+import jakarta.persistence.*;
 import sorokin.java.course.account.Account;
 
+import java.util.List;
+
+@Entity
+@Table(name = "users")
 public class User {
-    private final int id;
-    private final String login;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+
+    @Column(name = "login", unique = true)
+    private String login;
+
+    @OneToMany(mappedBy = "user", fetch = FetchType.EAGER)
     private List<Account> accountList;
 
-    public User(int id, String login, List<Account> accountList) {
-        this.id = id;
+    public User() {
+    }
+
+    public User(String login) {
         this.login = login;
-        this.accountList = accountList;
     }
 
     public int getId() {
@@ -36,7 +47,7 @@ public class User {
         return "User{" +
                 "id=" + id +
                 ", login='" + login + '\'' +
-                ", accountList=" + accountList +
                 '}';
     }
+
 }

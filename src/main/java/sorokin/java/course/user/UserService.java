@@ -1,61 +1,58 @@
 package sorokin.java.course.user;
 
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.stereotype.Component;
-import sorokin.java.course.account.AccountService;
-import sorokin.java.course.user.User;
+import sorokin.java.course.TransactionHelper;
+import sorokin.java.course.dto.DTOMapper;
+import sorokin.java.course.dto.UserDTO;
 
-import java.util.*;
+import java.util.List;
 
 @Component
 public class UserService {
 
-    private int idCounter;
-    private final Map<Integer, User> userMap;
-    private final Set<String> takenLogins;
-    private final AccountService accountService;
+    private final SessionFactory sessionFactory;
+    private final TransactionHelper transactionHelper;
+    private final DTOMapper dtoMapper;
 
-    public UserService(AccountService accountService) {
-        this.idCounter = 0;
-        this.userMap = new HashMap<>();
-        this.takenLogins = new HashSet<>();
-        this.accountService = accountService;
+    public UserService(SessionFactory sessionFactory, TransactionHelper transactionHelper, DTOMapper dtoMapper) {
+        this.sessionFactory = sessionFactory;
+        this.transactionHelper = transactionHelper;
+        this.dtoMapper = dtoMapper;
     }
 
     public User createUser(String login) {
-        String normalizedLogin = validateLogin(login);
-        if (takenLogins.contains(normalizedLogin)) {
-            throw new IllegalArgumentException("User already exists with login=%s".formatted(normalizedLogin));
-        }
+        validateLogin(login);
 
-        idCounter++;
-        var user = new User(idCounter, normalizedLogin, new ArrayList<>());
-        var defaultAccount = accountService.createAccount(user);
-        user.getAccountList().add(defaultAccount);
+        return transactionHelper.executeInTransactionOrJoin(session -> {
 
-        userMap.put(idCounter, user);
-        takenLogins.add(normalizedLogin);
-        return user;
+            User user = new User(login);
+            try {
+                session.persist(user);
+                return user;
+            } catch (ConstraintViolationException e) {
+                throw new IllegalArgumentException(
+                        "User already exists with login=%s".formatted(login)
+                );
+            }
+        });
+
     }
 
-    public User findUserById(Integer id) {
-        if (id == null || id <= 0) {
-            throw new IllegalArgumentException("user id must be > 0");
+    public List<UserDTO> findAll() {
+        try (Session session = sessionFactory.openSession()) {
+
+            var userList = session.createQuery("SELECT u FROM User u", User.class).list();
+            return dtoMapper.userListToUserDTOList(userList);
         }
-        var user = userMap.get(id);
-        if (user == null) {
-            throw new IllegalArgumentException("No such user with id=%s".formatted(id));
-        }
-        return user;
+
     }
 
-    public List<User> findAll() {
-        return userMap.values().stream().toList();
-    }
-
-    private String validateLogin(String login) {
+    private void validateLogin(String login) {
         if (login == null || login.isBlank()) {
             throw new IllegalArgumentException("login must not be blank");
         }
-        return login.trim();
     }
 }
